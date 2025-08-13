@@ -63,11 +63,6 @@ if (SpeechRecognition) {
 }
 
 
-// --- ここから下のコードは変更なし ---
-
-function handleSend() {
-    // ... (変更なし)
-}
 // ... (setReplyingState, addMessage, 各種イベントリスナーも変更なし)
 function handleSend() {
     if (isReplying) return;
