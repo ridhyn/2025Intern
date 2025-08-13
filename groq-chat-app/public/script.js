@@ -8,25 +8,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const headerTitle = document.getElementById('header-title');
     const micButton = document.getElementById('mic-button');
 
-    // Backend API base URL（必要に応じてPCのLAN IPに変更）
-    const API_BASE_URL = window.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:3001';
-
-    async function fetchChatResponse(prompt) {
-        const res = await fetch(`${API_BASE_URL}/api/chat`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompt })
-        });
-        if (!res.ok) {
-            throw new Error(`HTTP ${res.status}`);
-        }
-        const data = await res.json();
-        if (!data || data.ok !== true) {
-            throw new Error(data && data.error ? data.error : 'Unknown error');
-        }
-        return data.text || '';
-    }
-
    
     let rooms = {};         // すべてのチャットルームのデータを保持するオブジェクト
     let activeRoomId = null; // 現在表示しているチャットルームのID
