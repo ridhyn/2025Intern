@@ -1,54 +1,43 @@
-import React, { useState, useEffect, useRef } from 'react';
-import './App.css'; // CSSファイルをインポート
+import React from 'react';
+import { SafeAreaView, StyleSheet, Platform } from 'react-native';
+import { WebView } from 'react-native-webview';
 
-// コンポーネント名は先頭を大文字にします
-const App = () => {
-    const [messages, setMessages] = useState<{ text: string, sender: 'user' | 'bot' }[]>([]);
-    const [userInput, setUserInput] = useState('');
-    const chatBoxRef = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-        if (chatBoxRef.current) {
-            chatBoxRef.current.scrollTop = chatBoxRef.current.scrollHeight;
-        }
-    }, [messages]);
-
-    const handleSend = () => {
-        const text = userInput.trim();
-        if (!text) return;
-
-        console.log(`/${text}/`);
-        const newMessages = [...messages, { text: text, sender: 'user' as const }];
-        setMessages(newMessages);
-        setUserInput('');
-
-        setTimeout(() => {
-            setMessages(prev => [...prev, { text: 'これはBotのダミー応答です。', sender: 'bot' as const }]);
-        }, 800);
-    };
-
-    return (
-        <div className="chat-container">
-            <div ref={chatBoxRef} className="chat-box">
-                {messages.map((msg, index) => (
-                    <div key={index} className={`message ${msg.sender}`}>
-                        {msg.text}
-                    </div>
-                ))}
-            </div>
-
-            <div className="input-area">
-                <input
-                    type="text"
-                    value={userInput}
-                    onChange={(e) => setUserInput(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && handleSend()}
-                    placeholder="メッセージを入力..."
-                />
-                <button onClick={handleSend}>送信</button>
-            </div>
-        </div>
-    );
+// ウェブでIframeを表示するための簡易コンポーネント
+const IframeComponent = (props: { source: { uri: string } }) => {
+  // @ts-ignore
+  return <iframe src={props.source.uri} style={{ flex: 1, width: '100%', height: '100%', border: 'none' }} />;
 };
+
+const App = () => {
+  // ネイティブ用とウェブ用のソースを定義
+  const nativeSource = require('../../public/index.html');
+  const webSource = { uri: '/index.html' };
+
+  return (
+    <SafeAreaView style={styles.container}>
+      {Platform.OS === 'web' ? (
+        // --- ウェブで実行された場合 ---
+        <IframeComponent source={webSource} />
+      ) : (
+        // --- iOS/Androidで実行された場合 ---
+        <WebView
+          originWhitelist={['*']}
+          source={nativeSource}
+          allowFileAccess={true}
+          style={styles.webview}
+        />
+      )}
+    </SafeAreaView>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  webview: {
+    flex: 1,
+  },
+});
 
 export default App;
