@@ -9,7 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const micButton = document.getElementById('mic-button');
 
     // Backend API base URL（必要に応じてPCのLAN IPに変更）
-    const API_BASE_URL = window.EXPO_PUBLIC_API_BASE_URL || 'http://localhost:3001';
+    const API_BASE_URL = (typeof window !== 'undefined' && window.EXPO_PUBLIC_API_BASE_URL) || 'http://localhost:3001';
 
     async function fetchChatResponse(prompt) {
         const res = await fetch(`${API_BASE_URL}/api/chat`, {
