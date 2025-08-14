@@ -31,10 +31,21 @@ async function startServer() {
 
 				const groq = new Groq({ apiKey });
 
+				// 日本語応答を確実にするためのシステムプロンプト
+				const systemPrompt = {
+					role: 'system',
+					content: 'あなたは親切で丁寧な日本語のアシスタントです。常に日本語で返答してください。ユーザーの質問や要望に対して、分かりやすく詳しく説明し、必要に応じて具体例も含めて回答してください。'
+				};
+
+				// システムプロンプトを最初に追加
+				const messagesWithSystem = [systemPrompt, ...messages];
+
 				const stream = await groq.chat.completions.create({
-                    messages: messages,
+                    messages: messagesWithSystem,
                     model: 'llama3-8b-8192',
                     stream: true,
+                    temperature: 0.7,
+                    max_tokens: 2000,
                 });
 
                 for await (const chunk of stream) {

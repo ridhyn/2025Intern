@@ -35,78 +35,106 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function streamBotResponse(messages, botMessageBubble) {
-        const res = await fetch(`${API_BASE_URL}/api/chat`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ messages: messages })
-        });
+        try {
+            const res = await fetch(`${API_BASE_URL}/api/chat`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ messages: messages })
+            });
 
-        if (!res.ok) {
-            botMessageBubble.innerHTML = `エラー: サーバーとの接続に失敗しました (HTTP ${res.status})`;
+                    if (!res.ok) {
+            let errorMessage = 'サーバーとの接続に失敗しました。';
+            if (res.status === 404) {
+                errorMessage = 'APIエンドポイントが見つかりません。サーバーの設定を確認してください。';
+            } else if (res.status === 500) {
+                errorMessage = 'サーバー内部でエラーが発生しました。しばらく時間をおいてから再試行してください。';
+            } else if (res.status >= 400) {
+                errorMessage = `リクエストエラーが発生しました (HTTP ${res.status})`;
+            }
+            botMessageBubble.innerHTML = `エラー: ${errorMessage}`;
             return;
         }
 
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            let fullResponse = '';
 
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            buffer += decoder.decode(value, { stream: true });
-            const parts = buffer.split('\n\n');
-            buffer = parts.pop();
-            for (const part of parts) {
-                if (part.startsWith('data: ')) {
-                    const dataString = part.substring(6);
-                    if (dataString === '[DONE]') {
-                        return;
-                    }
-                    try {
-                        const data = JSON.parse(dataString);
-                        if (data.text) {
-                            await typeOutText(data.text, botMessageBubble);
-                        } else if (data.error) {
-                            botMessageBubble.innerHTML = `エラー: ${data.error}`;
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                
+                buffer += decoder.decode(value, { stream: true });
+                const parts = buffer.split('\n\n');
+                buffer = parts.pop();
+                
+                for (const part of parts) {
+                    if (part.startsWith('data: ')) {
+                        const dataString = part.substring(6);
+                        if (dataString === '[DONE]') {
+                            // 応答完了時の処理
+                            if (fullResponse.trim() === '') {
+                                botMessageBubble.innerHTML = '申し訳ございません。応答を生成できませんでした。もう一度お試しください。';
+                            }
+                            return;
                         }
-                    } catch (e) {
-                        console.error('JSON parse error', e);
+                        
+                        try {
+                            const data = JSON.parse(dataString);
+                            if (data.text) {
+                                fullResponse += data.text;
+                                await typeOutText(data.text, botMessageBubble);
+                            } else if (data.error) {
+                                botMessageBubble.innerHTML = `エラー: ${data.error}`;
+                            }
+                        } catch (e) {
+                            console.error('JSON parse error', e);
+                        }
                     }
                 }
             }
+        } catch (error) {
+            console.error('Streaming error:', error);
+            botMessageBubble.innerHTML = 'ネットワークエラーが発生しました。接続を確認してください。';
         }
     }
 
     function handleSend() {
         if (isReplying) return;
 
-        const text = userInput.value;
+        const text = userInput.value.trim();
         if (!text) return;
 
         setReplyingState(true);
 
+        // ユーザーメッセージを保存・表示
         saveMessage(text, 'user');
         addMessageToDOM(text, 'user');
         userInput.value = '';
         userInput.style.height = 'auto';
 
+        // API用のメッセージ形式に変換
         const apiMessages = rooms[activeRoomId].messages.map(msg => ({
             role: msg.sender === 'bot' ? 'assistant' : 'user',
             content: msg.text
         }));
 
+        // ボットの応答用のバブルを作成
         const botMessageBubble = addMessageToDOM('', 'bot');
         scrollToBottom();
 
+        // 日本語応答のストリーミング開始
         streamBotResponse(apiMessages, botMessageBubble)
             .then(() => {
                 const finalBotText = botMessageBubble.innerText;
-                saveMessage(finalBotText, 'bot');
-                saveAndRenderAll();
+                if (finalBotText && finalBotText.trim() !== '') {
+                    saveMessage(finalBotText, 'bot');
+                    saveAndRenderAll();
+                }
             })
             .catch((err) => {
                 console.error("Streaming failed", err);
-                botMessageBubble.innerText = "エラーが発生しました。";
+                botMessageBubble.innerText = "申し訳ございません。エラーが発生しました。もう一度お試しください。";
                 saveMessage("エラーが発生しました。", 'bot');
             })
             .finally(() => {
@@ -176,7 +204,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function createNewRoom() {
         const newRoomId = `room_${Date.now()}`;
-        rooms[newRoomId] = { title: '新しいチャット', messages: [] };
+        rooms[newRoomId] = { 
+            title: '新しいチャット', 
+            messages: [
+                {
+                    text: 'こんにちは！何かお手伝いできることはありますか？',
+                    sender: 'bot'
+                }
+            ] 
+        };
         activeRoomId = newRoomId;
         saveAndRenderAll();
     }
@@ -254,14 +290,33 @@ document.addEventListener('DOMContentLoaded', () => {
     if (SpeechRecognition) {
         recognition = new SpeechRecognition();
         recognition.lang = 'ja-JP';
-        recognition.onresult = (event) => userInput.value = event.results[0][0].transcript;
+        recognition.continuous = false;
+        recognition.interimResults = false;
+        recognition.maxAlternatives = 1;
+        
+        recognition.onresult = (event) => {
+            const transcript = event.results[0][0].transcript;
+            userInput.value = transcript;
+            // 音声入力後に自動で送信（オプション）
+            // handleSend();
+        };
+        
         recognition.onend = () => micButton.classList.remove('recording');
+        recognition.onerror = (event) => {
+            console.error('Speech recognition error:', event.error);
+            micButton.classList.remove('recording');
+        };
+        
         micButton.addEventListener('click', () => {
             if (micButton.classList.contains('recording')) {
                 recognition.stop();
             } else {
-                recognition.start();
-                micButton.classList.add('recording');
+                try {
+                    recognition.start();
+                    micButton.classList.add('recording');
+                } catch (error) {
+                    console.error('Failed to start speech recognition:', error);
+                }
             }
         });
     } else {
