@@ -1,12 +1,9 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const Groq = require('groq-sdk');
 
 const app = express();
-
-const groq = new Groq({
-    apiKey: process.env.GROQ_API_KEY,
-});
 
 async function startServer() {
     try {
@@ -18,14 +15,23 @@ async function startServer() {
             res.setHeader('Cache-Control', 'no-cache');
             res.setHeader('Connection', 'keep-alive');
 
-            try {
+			try {
                 const { messages } = req.body;
 
                 if (!messages || messages.length === 0) {
                     return res.status(400).json({ ok: false, error: 'Messages are missing' });
                 }
 
-                const stream = await groq.chat.completions.create({
+				const apiKey = process.env.GROQ_API_KEY;
+				if (!apiKey) {
+					res.write(`data: ${JSON.stringify({ error: 'Server misconfigured: GROQ_API_KEY is missing.' })}\n\n`);
+					res.write(`data: [DONE]\n\n`);
+					return;
+				}
+
+				const groq = new Groq({ apiKey });
+
+				const stream = await groq.chat.completions.create({
                     messages: messages,
                     model: 'llama3-8b-8192',
                     stream: true,
