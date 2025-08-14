@@ -10,36 +10,45 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
+  const theme = Colors[colorScheme ?? 'light'];
+
+  const tabScreens = [
+    {
+      name: 'index',
+      title: 'Home',
+      icon: 'house.fill',
+    },
+    {
+      name: 'explore',
+      title: 'Explore',
+      icon: 'paperplane.fill',
+    },
+  ] as const;
 
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
+        tabBarActiveTintColor: theme.tint,
         headerShown: false,
         tabBarButton: HapticTab,
         tabBarBackground: TabBarBackground,
         tabBarStyle: Platform.select({
-          ios: {
-            // Use a transparent background on iOS to show the blur effect
-            position: 'absolute',
-          },
+          ios: { position: 'absolute' }, // Transparent background for iOS blur effect
           default: {},
         }),
       }}>
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Home',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="explore"
-        options={{
-          title: 'Explore',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
-        }}
-      />
+      {tabScreens.map(({ name, title, icon }) => (
+        <Tabs.Screen
+          key={name}
+          name={name}
+          options={{
+            title,
+            tabBarIcon: ({ color }) => (
+              <IconSymbol size={28} name={icon} color={color} />
+            ),
+          }}
+        />
+      ))}
     </Tabs>
   );
 }
