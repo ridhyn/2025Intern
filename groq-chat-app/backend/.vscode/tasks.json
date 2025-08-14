@@ -1,0 +1,11 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Install node-fetch",
+			"type": "shell",
+			"command": "npm install node-fetch",
+			"group": "build"
+		}
+	]
+}

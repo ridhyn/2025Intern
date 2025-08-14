@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat App</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="page-container">
+        <aside id="sidebar">
+            <button id="new-chat-button">+ 新しいチャット</button>
+            <ul id="room-list">
+                </ul>
+        </aside>
+
+        <div id="app-container">
+            <header>
+                <h1 id="header-title"></h1>
+            </header>
+            <main id="chat-area">
+                </main>
+            <footer>
+                <div class="input-wrapper">
+                    <button id="mic-button" title="音声入力">🎤</button>
+                    <textarea id="user-input" placeholder="メッセージを入力..." rows="1"></textarea>
+                    <button id="send-button" title="送信">➤</button>
+                </div>
+            </footer>
+        </div>
+    </div>
+    <script src="config.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>

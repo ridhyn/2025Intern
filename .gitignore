@@ -1,0 +1,8 @@
+# APIキーなどの秘密情報を記録する.envファイルを無視する
+.env
+
+# backendディレクトリ内の.envファイルも無視する
+backend/.env
+
+# Node.jsのパッケージフォルダを無視する
+node_modules/

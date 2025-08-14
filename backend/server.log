@@ -1,0 +1,6 @@
+
+> backend@1.0.0 start
+> node server.js
+
+node-fetch loaded successfully.
+✅ Server is running smoothly on port 3001
