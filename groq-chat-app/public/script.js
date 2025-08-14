@@ -1,5 +1,4 @@
 document.addEventListener('DOMContentLoaded', () => {
-
     const chatArea = document.getElementById('chat-area');
     const userInput = document.getElementById('user-input');
     const sendButton = document.getElementById('send-button');
@@ -8,282 +7,228 @@ document.addEventListener('DOMContentLoaded', () => {
     const headerTitle = document.getElementById('header-title');
     const micButton = document.getElementById('mic-button');
 
-    // Backend API base URL（必要に応じてPCのLAN IPに変更）
-    const API_BASE_URL = (typeof window !== 'undefined' && window.EXPO_PUBLIC_API_BASE_URL) || 'http://localhost:3001';
+    const API_BASE_URL = 'http://localhost:3001';
 
-    async function fetchChatResponse(prompt) {
+    let rooms = {};
+    let activeRoomId = null;
+    let isReplying = false;
+
+    const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+    async function typeOutText(text, bubble) {
+        const processedText = text.replace(/\n/g, '<br>');
+        for (let i = 0; i < processedText.length; i++) {
+            const char = processedText[i];
+            if (char === '<' && processedText.substring(i, i + 4) === '<br>') {
+                bubble.innerHTML += '<br>';
+                i += 3;
+                continue;
+            }
+            if (char === ' ') {
+                bubble.innerHTML += ' ';
+            } else {
+                bubble.innerHTML += `<span class="emerge-char">${char}</span>`;
+            }
+            scrollToBottom();
+            await sleep(50);
+        }
+    }
+
+    async function streamBotResponse(messages, botMessageBubble) {
         const res = await fetch(`${API_BASE_URL}/api/chat`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompt })
+            body: JSON.stringify({ messages: messages })
         });
+
         if (!res.ok) {
-            throw new Error(`HTTP ${res.status}`);
-        }
-        const data = await res.json();
-        if (!data || data.ok !== true) {
-            throw new Error(data && data.error ? data.error : 'Unknown error');
-        }
-        return data.text || '';
-    }
-
-   
-    let rooms = {};         // すべてのチャットルームのデータを保持するオブジェクト
-    let activeRoomId = null; // 現在表示しているチャットルームのID
-    let isReplying = false;   // ボットが返信中で、ユーザーの入力をロックしているか
-
-   
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    let recognition;
-
-    // ブラウザがAPIをサポートしている場合のみ初期化
-    if (SpeechRecognition) {
-        recognition = new SpeechRecognition();
-        recognition.lang = 'ja-JP';
-        recognition.interimResults = true; // 認識の途中結果を取得
-        recognition.continuous = false;    // 発話が途切れたら認識を終了
-    } else {
-        console.warn("このブラウザはWeb Speech APIをサポートしていません。");
-        micButton.style.display = 'none'; // サポート外ならマイクボタンを非表示
-    }
-
-   
-
-    /**
-     * @brief 送信ボタンが押されたときのメイン処理
-     */
-    function handleSend() {
-        if (isReplying) return; // 返信中は処理を中断
-
-        // ★ .trim() を削除して、スペースのみの入力を許可
-        const text = userInput.value; 
-
-        if (!text) return; // 入力が完全に空の場合（スペースも何もない場合）は処理を中断
-
-        setReplyingState(true); // UIをロック状態にする
-
-        // ユーザーのメッセージを保存・表示
-        saveMessage(text, 'user');
-        addMessageToDOM(text, 'user');
-        scrollToBottom();
-
-        // 送信後に入力欄をリセット
-        userInput.value = '';
-        userInput.style.height = 'auto';
-
-        // バックエンドへ問い合わせ
-        fetchChatResponse(text)
-            .then((botResponse) => {
-                saveMessage(botResponse, 'bot');
-                addMessageToDOM(botResponse, 'bot');
-                scrollToBottom();
-                saveAndRenderAll(); // タイトル更新などを反映させるため再描画
-            })
-            .catch((err) => {
-                const errMsg = `エラー: ${err && err.message ? err.message : String(err)}`;
-                saveMessage(errMsg, 'bot');
-                addMessageToDOM(errMsg, 'bot');
-                scrollToBottom();
-                saveAndRenderAll();
-            })
-            .finally(() => {
-                setReplyingState(false); // UIのロックを解除
-            });
-    }
-
-    /**
-     * @brief 新しいチャットルームを作成する
-     */
-    function createNewRoom() {
-        const newRoomId = `room_${Date.now()}`;
-        rooms[newRoomId] = {
-            title: '新しいチャット',
-            messages: []
-        };
-        activeRoomId = newRoomId;
-        saveAndRenderAll();
-    }
-    
-    /**
-     * @brief 指定されたチャットルームを削除する
-     * @param {string} roomIdToDelete - 削除するルームのID
-     */
-    function deleteRoom(roomIdToDelete) {
-        if (!confirm(`「${rooms[roomIdToDelete].title}」を削除しますか？この操作は取り消せません。`)) {
+            botMessageBubble.innerHTML = `エラー: サーバーとの接続に失敗しました (HTTP ${res.status})`;
             return;
         }
 
-        delete rooms[roomIdToDelete]; // データから削除
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
 
-        // もしアクティブなルームを削除した場合の処理
-        if (activeRoomId === roomIdToDelete) {
-            const remainingRoomIds = Object.keys(rooms);
-            if (remainingRoomIds.length > 0) {
-                // 残っているルームの先頭を新しいアクティブなルームにする
-                activeRoomId = remainingRoomIds[0];
-            } else {
-                // ルームが一つもなくなったら、新しいルームを作成する
-                createNewRoom();
-                return; // createNewRoomの中で再描画まで行われる
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const parts = buffer.split('\n\n');
+            buffer = parts.pop();
+            for (const part of parts) {
+                if (part.startsWith('data: ')) {
+                    const dataString = part.substring(6);
+                    if (dataString === '[DONE]') {
+                        return;
+                    }
+                    try {
+                        const data = JSON.parse(dataString);
+                        if (data.text) {
+                            await typeOutText(data.text, botMessageBubble);
+                        } else if (data.error) {
+                            botMessageBubble.innerHTML = `エラー: ${data.error}`;
+                        }
+                    } catch (e) {
+                        console.error('JSON parse error', e);
+                    }
+                }
             }
         }
-        
-        saveAndRenderAll(); // 変更を保存して画面全体を更新
     }
 
-    // ----------------------------------------------------------------
-    // 5. データの保存と読み込みに関する関数 (LocalStorage)
-    // ----------------------------------------------------------------
+    function handleSend() {
+        if (isReplying) return;
 
-    /**
-     * @brief ブラウザのLocalStorageからチャットデータを読み込む
-     */
-    function loadRooms() {
-        try {
-            const savedRooms = localStorage.getItem('chatRooms');
-            if (savedRooms) {
-                rooms = JSON.parse(savedRooms);
-            }
-        } catch (e) {
-            console.error("チャット履歴の読み込みに失敗しました。", e);
-            rooms = {}; // エラー時は空にする
-        }
+        const text = userInput.value;
+        if (!text) return;
 
-        // 最後のルームがない場合は新しいルームを作成
-        if (Object.keys(rooms).length === 0) {
-            createNewRoom();
-        }
+        setReplyingState(true);
 
-        const savedActiveRoom = localStorage.getItem('activeRoomId');
-        // 最後に開いていたルーム、または最初のルームをアクティブにする
-        activeRoomId = savedActiveRoom && rooms[savedActiveRoom] ? savedActiveRoom : Object.keys(rooms)[0];
+        saveMessage(text, 'user');
+        addMessageToDOM(text, 'user');
+        userInput.value = '';
+        userInput.style.height = 'auto';
+
+        const apiMessages = rooms[activeRoomId].messages.map(msg => ({
+            role: msg.sender === 'bot' ? 'assistant' : 'user',
+            content: msg.text
+        }));
+
+        const botMessageBubble = addMessageToDOM('', 'bot');
+        scrollToBottom();
+
+        streamBotResponse(apiMessages, botMessageBubble)
+            .then(() => {
+                const finalBotText = botMessageBubble.innerText;
+                saveMessage(finalBotText, 'bot');
+                saveAndRenderAll();
+            })
+            .catch((err) => {
+                console.error("Streaming failed", err);
+                botMessageBubble.innerText = "エラーが発生しました。";
+                saveMessage("エラーが発生しました。", 'bot');
+            })
+            .finally(() => {
+                setReplyingState(false);
+            });
     }
 
-    /**
-     * @brief 現在のチャットデータをLocalStorageに保存し、画面全体を再描画する
-     */
-    function saveAndRenderAll() {
-        localStorage.setItem('chatRooms', JSON.stringify(rooms));
-        localStorage.setItem('activeRoomId', activeRoomId);
-        renderRoomList();
-        renderActiveRoom();
-    }
-    
-    /**
-     * @brief メッセージを現在のルームのデータとして保存する
-     * @param {string} text - メッセージ内容
-     * @param {'user' | 'bot'} sender - 送信者
-     */
     function saveMessage(text, sender) {
         if (!activeRoomId) return;
-        
         const room = rooms[activeRoomId];
         room.messages.push({ text, sender });
-
-        // 最初のユーザーメッセージの場合、それをルームのタイトルにする
         if (room.messages.length === 1 && sender === 'user') {
-            room.title = text.substring(0, 20); // 最初の20文字
+            room.title = text.substring(0, 20);
         }
     }
-    
-    // ----------------------------------------------------------------
-    // 6. 画面の表示を更新する関数 (UI)
-    // ----------------------------------------------------------------
 
-    /**
-     * @brief サイドバーのルーム一覧を最新のデータで描画する
-     */
-    function renderRoomList() {
-        roomList.innerHTML = "";
-        Object.keys(rooms).forEach(roomId => {
-            const li = document.createElement('li');
-            li.textContent = rooms[roomId].title;
-            li.dataset.roomId = roomId;
-            if (roomId === activeRoomId) {
-                li.classList.add('active');
-            }
-
-            const deleteButton = document.createElement('button');
-            deleteButton.className = 'delete-room-button';
-            deleteButton.innerHTML = '&times;';
-            deleteButton.title = 'チャットを削除';
-            deleteButton.dataset.roomId = roomId;
-
-            li.appendChild(deleteButton);
-            roomList.appendChild(li);
-        });
+    function addMessageToDOM(text, sender) {
+        const messageRow = document.createElement('div');
+        messageRow.className = `message-row ${sender}`;
+        const messageBubble = document.createElement('div');
+        messageBubble.className = `message-bubble ${sender}`;
+        messageBubble.innerHTML = text.replace(/\n/g, '<br>');
+        messageRow.appendChild(messageBubble);
+        chatArea.appendChild(messageRow);
+        return messageBubble;
     }
 
-    /**
-     * @brief 現在アクティブなルームの会話履歴をチャットエリアに描画する
-     */
     function renderActiveRoom() {
         if (!activeRoomId || !rooms[activeRoomId]) {
             headerTitle.textContent = "チャットを選択してください";
             chatArea.innerHTML = "";
             return;
         }
-        
         headerTitle.textContent = rooms[activeRoomId].title;
         chatArea.innerHTML = "";
-        
         rooms[activeRoomId].messages.forEach(msg => {
             addMessageToDOM(msg.text, msg.sender);
         });
         scrollToBottom();
     }
-
-    /**
-     * @brief 1つのメッセージをDOM要素としてチャットエリアの末尾に追加する
-     * @param {string} text - メッセージ内容
-     * @param {'user' | 'bot'} sender - 送信者
-     */
-    function addMessageToDOM(text, sender) {
-        const messageRow = document.createElement('div');
-        messageRow.className = `message-row ${sender}`;
-
-        const messageBubble = document.createElement('div');
-        messageBubble.className = `message-bubble ${sender}`;
-        messageBubble.innerHTML = text.replace(/\n/g, '<br>');
-
-        messageRow.appendChild(messageBubble);
-        chatArea.appendChild(messageRow);
-    }
     
-    /**
-     * @brief ユーザーの入力状態（ロック/解除）をUIに反映させる
-     * @param {boolean} locked - trueならロック、falseなら解除
-     */
+    function renderRoomList() {
+        roomList.innerHTML = "";
+        Object.keys(rooms).forEach(roomId => {
+            const li = document.createElement('li');
+            li.textContent = rooms[roomId].title;
+            li.dataset.roomId = roomId;
+            if (roomId === activeRoomId) li.classList.add('active');
+            const deleteButton = document.createElement('button');
+            deleteButton.className = 'delete-room-button';
+            deleteButton.innerHTML = '&times;';
+            deleteButton.title = 'チャットを削除';
+            deleteButton.dataset.roomId = roomId;
+            li.appendChild(deleteButton);
+            roomList.appendChild(li);
+        });
+    }
+
     function setReplyingState(locked) {
         isReplying = locked;
-        userInput.disabled = locked;
         sendButton.disabled = locked;
     }
 
-    /**
-     * @brief チャットエリアを一番下までスクロールする
-     */
     function scrollToBottom() {
         chatArea.scrollTop = chatArea.scrollHeight;
     }
 
-    // ----------------------------------------------------------------
-    // 7. イベントリスナーの設定
-    // ----------------------------------------------------------------
+    function createNewRoom() {
+        const newRoomId = `room_${Date.now()}`;
+        rooms[newRoomId] = { title: '新しいチャット', messages: [] };
+        activeRoomId = newRoomId;
+        saveAndRenderAll();
+    }
 
-    // 「新しいチャット」ボタン
+    function deleteRoom(roomIdToDelete) {
+        if (!confirm(`「${rooms[roomIdToDelete].title}」を削除しますか？`)) return;
+        delete rooms[roomIdToDelete];
+        if (activeRoomId === roomIdToDelete) {
+            const remainingRoomIds = Object.keys(rooms);
+            activeRoomId = remainingRoomIds.length > 0 ? remainingRoomIds[0] : null;
+            if (!activeRoomId) {
+                createNewRoom();
+                return;
+            }
+        }
+        saveAndRenderAll();
+    }
+
+    function saveAndRenderAll() {
+        localStorage.setItem('chatRooms', JSON.stringify(rooms));
+        localStorage.setItem('activeRoomId', activeRoomId);
+        renderRoomList();
+        renderActiveRoom();
+    }
+
+    function loadRooms() {
+        try {
+            const savedRooms = localStorage.getItem('chatRooms');
+            if (savedRooms) rooms = JSON.parse(savedRooms);
+        } catch (e) {
+            console.error("Failed to load chat history.", e);
+            rooms = {};
+        }
+
+        if (Object.keys(rooms).length === 0) {
+            createNewRoom();
+        }
+
+        const savedActiveRoom = localStorage.getItem('activeRoomId');
+        activeRoomId = savedActiveRoom && rooms[savedActiveRoom] ? savedActiveRoom : Object.keys(rooms)[0];
+    }
+    
     newChatButton.addEventListener('click', createNewRoom);
+    sendButton.addEventListener('click', handleSend);
 
-    // ルームリストのクリック（ルーム切り替え、または削除）
     roomList.addEventListener('click', (e) => {
         const target = e.target;
         if (target.classList.contains('delete-room-button')) {
-            e.stopPropagation(); // liへのイベント伝播を防ぐ
+            e.stopPropagation();
             const roomId = target.dataset.roomId;
             if (roomId) deleteRoom(roomId);
-            return;
-        }
-        if (target.tagName === 'LI') {
+        } else if (target.tagName === 'LI') {
             const roomId = target.dataset.roomId;
             if (roomId && roomId !== activeRoomId) {
                 activeRoomId = roomId;
@@ -292,32 +237,25 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // 送信ボタン
-    sendButton.addEventListener('click', handleSend);
-
-    // テキストエリアのキーボード操作
     userInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && e.shiftKey) { // Shift + Enterで送信
+        if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             handleSend();
         }
     });
-    
-    // テキストエリアの自動伸縮
+
     userInput.addEventListener('input', () => {
         userInput.style.height = 'auto';
         userInput.style.height = `${userInput.scrollHeight}px`;
     });
     
-    // 音声認識のイベント
-    if (recognition) {
-        recognition.onresult = (event) => {
-            userInput.value = event.results[0][0].transcript;
-            userInput.dispatchEvent(new Event('input')); // 高さを更新
-        };
-        recognition.onend = () => {
-            micButton.classList.remove('recording');
-        };
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let recognition;
+    if (SpeechRecognition) {
+        recognition = new SpeechRecognition();
+        recognition.lang = 'ja-JP';
+        recognition.onresult = (event) => userInput.value = event.results[0][0].transcript;
+        recognition.onend = () => micButton.classList.remove('recording');
         micButton.addEventListener('click', () => {
             if (micButton.classList.contains('recording')) {
                 recognition.stop();
@@ -326,11 +264,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 micButton.classList.add('recording');
             }
         });
+    } else {
+        micButton.style.display = 'none';
     }
-    
-    // ----------------------------------------------------------------
-    // 8. 初期化処理
-    // ----------------------------------------------------------------
+
     loadRooms();
     saveAndRenderAll();
 });
