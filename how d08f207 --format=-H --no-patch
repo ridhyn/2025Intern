@@ -1,0 +1,10 @@
+[33m9d55547[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mfeat/llm-title-generation[m[33m, [m[1;31morigin/feat/llm-title-generation[m[33m)[m Merge branch 'feat/llm-title-generation' of https://github.com/ridhyn/2025Intern into feat/llm-title-generation
+[33md08f207[m hirose add tatus file and update backend server to handle missing GROQ_API_KEY error
+[33mfa403e0[m feat: LLM-based title generation for chat rooms
+[33m3f13acd[m[33m ([m[1;32mmain[m[33m)[m hirose Fix the no startup error
+[33mff444fc[m Merge pull request #6 from ridhyn/fix/groq-api-bot
+[33mf752203[m[33m ([m[1;31morigin/feature/include-env[m[33m)[m oki fainal
+[33m0801b2c[m Merge pull request #4 from ridhyn/feature/include-env
+[33m2dfe381[m chore: include backend/.env in repo (key redacted) and remove ignore rule
+[33m4ec9ca9[m[33m ([m[1;31morigin/feature/shareable-config[m[33m, [m[1;32mfeature/shareable-config[m[33m)[m feat(frontend): add public/config.js for shareable API base URL; load before script.js. chore: ensure backend/.env ignored and provide .env.example (manual)
+[33mc590b27[m[33m ([m[1;31morigin/feature/shareable-frontend-config[m[33m, [m[1;32mfeature/shareable-frontend-config[m[33m)[m feat(frontend): make API base URL shareable via public/config.js (example provided)

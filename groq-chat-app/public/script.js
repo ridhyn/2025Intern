@@ -1,5 +1,3 @@
-// script.js の「じわじわ」強化版
-
 document.addEventListener('DOMContentLoaded', () => {
     const chatArea = document.getElementById('chat-area');
     const userInput = document.getElementById('user-input');
@@ -8,73 +6,99 @@ document.addEventListener('DOMContentLoaded', () => {
     const roomList = document.getElementById('room-list');
     const headerTitle = document.getElementById('header-title');
     const micButton = document.getElementById('mic-button');
+    const attachButton = document.getElementById('attach-button');
+    const fileInput = document.getElementById('file-input');
 
-    const API_BASE_URL = 'http://localhost:3004';
+    const API_BASE_URL = 'http://localhost:3001';
 
-    // ★ 変更点1: タイピング速度を制御するための待機(sleep)関数
+    let rooms = {};
+    let activeRoomId = null;
+    let isReplying = false;
+
     const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-    // ★ 変更点2: 受け取ったテキストを一文字ずつ表示する関数
     async function typeOutText(text, bubble) {
-        // 改行を<br>に変換してから一文字ずつ処理
         const processedText = text.replace(/\n/g, '<br>');
-        for (const char of processedText) {
-            // <br>タグの場合はまとめて追加
-            if (char === '<') {
-                const tag = processedText.substring(processedText.indexOf('<'), processedText.indexOf('>') + 1);
-                bubble.innerHTML += tag;
-                // 'b', 'r', '>' の分、ループをスキップ
-                for (let i = 0; i < tag.length -1; i++) continue;
+        for (let i = 0; i < processedText.length; i++) {
+            const char = processedText[i];
+            if (char === '<' && processedText.substring(i, i + 4) === '<br>') {
+                bubble.innerHTML += '<br>';
+                i += 3;
+                continue;
+            }
+            if (char === ' ') {
+                bubble.innerHTML += ' ';
             } else {
-                bubble.innerHTML += char;
+                bubble.innerHTML += `<span class="emerge-char">${char}</span>`;
             }
             scrollToBottom();
-            await sleep(50); // ← ここで表示速度を調整！
+            await sleep(50);
         }
     }
 
-    async function streamBotResponse(prompt, botMessageBubble) {
+    async function streamBotResponse(messages, botMessageBubble) {
         try {
             const res = await fetch(`${API_BASE_URL}/api/chat`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ prompt })
+                body: JSON.stringify({ messages })
             });
-
-            if (!res.ok) {
-                botMessageBubble.innerHTML = `エラー: サーバーとの接続に失敗しました (HTTP ${res.status})`;
-                return;
-            }
-            
-            const data = await res.json();
-            
-            if (data.ok && data.text) {
-                // タイプライター効果で表示
-                await typeOutText(data.text, botMessageBubble);
-            } else if (data.error) {
-                botMessageBubble.innerHTML = `エラー: ${data.error}`;
-            } else {
-                botMessageBubble.innerHTML = 'エラー: 予期しない応答形式です';
+            if (!res.ok) throw new Error(`サーバーエラー: ${res.status}`);
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream: true });
+                const parts = buffer.split('\n\n');
+                buffer = parts.pop();
+                for (const part of parts) {
+                    if (part.startsWith('data: ')) {
+                        const dataString = part.substring(6);
+                        if (dataString === '[DONE]') return;
+                        try {
+                            const data = JSON.parse(dataString);
+                            if (data.text) {
+                                await typeOutText(data.text, botMessageBubble);
+                            } else if (data.error) {
+                                botMessageBubble.innerText = `エラー: ${data.error}`;
+                            }
+                        } catch (e) {
+                            console.error('JSON解析エラー', e, dataString);
+                        }
+                    }
+                }
             }
         } catch (error) {
-            console.error('Fetch error:', error);
-            botMessageBubble.innerHTML = `エラー: 接続に失敗しました`;
+            console.error('ストリーミング接続エラー:', error);
+            botMessageBubble.innerText = 'エラー: サーバーとの接続に失敗しました。';
         }
     }
 
-    // handleSend関数は変更なし
+    function createApiMessages() {
+        if (!activeRoomId || !rooms[activeRoomId]) return [];
+        const textPromptForImage = '（画像が送信されました。画像について言及し、簡単な応答をしてください。）';
+        return rooms[activeRoomId].messages.map(msg => ({
+            role: msg.sender === 'bot' ? 'assistant' : 'user',
+            content: msg.text.startsWith('data:image') ? textPromptForImage : msg.text
+        }));
+    }
+
     function handleSend() {
         if (isReplying) return;
-        const text = userInput.value;
+        const text = userInput.value.trim();
         if (!text) return;
         setReplyingState(true);
         saveMessage(text, 'user');
         addMessageToDOM(text, 'user');
         userInput.value = '';
-        userInput.style.height = 'auto';
+        userInput.style.height = 'auto'; // 送信後に高さをリセット
+
+        const apiMessages = createApiMessages();
         const botMessageBubble = addMessageToDOM('', 'bot');
         scrollToBottom();
-        streamBotResponse(text, botMessageBubble)
+        streamBotResponse(apiMessages, botMessageBubble)
             .then(() => {
                 const finalBotText = botMessageBubble.innerText;
                 saveMessage(finalBotText, 'bot');
@@ -90,43 +114,48 @@ document.addEventListener('DOMContentLoaded', () => {
             });
     }
 
-    // これ以降の他の関数 (createNewRoom, deleteRoom, etc.) は変更ありません
-    // ... (前回の回答と同じコードなので省略) ...
-    let rooms = {};
-    let activeRoomId = null;
-    let isReplying = false;
-
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    let recognition;
-    if (SpeechRecognition) {
-        recognition = new SpeechRecognition();
-        recognition.lang = 'ja-JP';
-        recognition.interimResults = true;
-
-        recognition.onresult = (event) => {
-            userInput.value = event.results[0][0].transcript;
-            userInput.dispatchEvent(new Event('input'));
+    function handleFileSelect(event) {
+        const file = event.target.files[0];
+        if (!file || !file.type.startsWith('image/')) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const imageDataUrl = e.target.result;
+            setReplyingState(true);
+            saveMessage(imageDataUrl, 'user');
+            addMessageToDOM(imageDataUrl, 'user');
+            scrollToBottom();
+            const apiMessages = createApiMessages();
+            const botMessageBubble = addMessageToDOM('', 'bot');
+            scrollToBottom();
+            streamBotResponse(apiMessages, botMessageBubble)
+                .then(() => {
+                    const finalBotText = botMessageBubble.innerText;
+                    saveMessage(finalBotText, 'bot');
+                })
+                .catch((err) => {
+                    console.error("Streaming failed", err);
+                })
+                .finally(() => {
+                    setReplyingState(false);
+                });
         };
-        recognition.onend = () => micButton.classList.remove('recording');
-
-        micButton.addEventListener('click', () => {
-            if (micButton.classList.contains('recording')) {
-                recognition.stop();
-            } else {
-                recognition.start();
-                micButton.classList.add('recording');
-            }
-        });
-    } else {
-        console.warn("Web Speech API not supported.");
-        micButton.style.display = 'none';
+        reader.readAsDataURL(file);
+        event.target.value = '';
     }
-    
-    function saveAndRenderAll() {
-        localStorage.setItem('chatRooms', JSON.stringify(rooms));
-        localStorage.setItem('activeRoomId', activeRoomId);
-        renderRoomList();
-        renderActiveRoom();
+
+    function addMessageToDOM(text, sender) {
+        const messageRow = document.createElement('div');
+        messageRow.className = `message-row ${sender}`;
+        const messageBubble = document.createElement('div');
+        messageBubble.className = `message-bubble ${sender}`;
+        if (text.startsWith('data:image')) {
+            messageBubble.innerHTML = `<img src="${text}" alt="送信された画像">`;
+        } else {
+            messageBubble.innerHTML = text.replace(/\n/g, '<br>');
+        }
+        messageRow.appendChild(messageBubble);
+        chatArea.appendChild(messageRow);
+        return messageBubble;
     }
 
     function saveMessage(text, sender) {
@@ -134,29 +163,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const room = rooms[activeRoomId];
         room.messages.push({ text, sender });
         if (room.messages.length === 1 && sender === 'user') {
-            room.title = text.substring(0, 20);
+            room.title = text.startsWith('data:image') ? '画像チャット' : text.substring(0, 20);
         }
-    }
-
-    function renderRoomList() {
-        roomList.innerHTML = "";
-        Object.keys(rooms).forEach(roomId => {
-            const li = document.createElement('li');
-            li.textContent = rooms[roomId].title;
-            li.dataset.roomId = roomId;
-            if (roomId === activeRoomId) {
-                li.classList.add('active');
-            }
-
-            const deleteButton = document.createElement('button');
-            deleteButton.className = 'delete-room-button';
-            deleteButton.innerHTML = '&times;';
-            deleteButton.title = 'チャットを削除';
-            deleteButton.dataset.roomId = roomId;
-
-            li.appendChild(deleteButton);
-            roomList.appendChild(li);
-        });
     }
 
     function renderActiveRoom() {
@@ -165,47 +173,39 @@ document.addEventListener('DOMContentLoaded', () => {
             chatArea.innerHTML = "";
             return;
         }
-        
         headerTitle.textContent = rooms[activeRoomId].title;
         chatArea.innerHTML = "";
-        
         rooms[activeRoomId].messages.forEach(msg => {
             addMessageToDOM(msg.text, msg.sender);
         });
         scrollToBottom();
     }
-    
-    function addMessageToDOM(text, sender) {
-        const messageRow = document.createElement('div');
-        messageRow.className = `message-row ${sender}`;
 
-        const messageBubble = document.createElement('div');
-        messageBubble.className = `message-bubble ${sender}`;
-        messageBubble.innerHTML = text.replace(/\n/g, '<br>');
-
-        messageRow.appendChild(messageBubble);
-        chatArea.appendChild(messageRow);
-        
-        return messageBubble;
-    }
-    
-    function setReplyingState(locked) {
-        isReplying = locked;
-        //userInput.disabled = locked;
-        sendButton.disabled = locked;
+    function renderRoomList() {
+        roomList.innerHTML = "";
+        Object.keys(rooms).forEach(roomId => {
+            const li = document.createElement('li');
+            li.textContent = rooms[roomId].title;
+            li.dataset.roomId = roomId;
+            if (roomId === activeRoomId) li.classList.add('active');
+            const deleteButton = document.createElement('button');
+            deleteButton.className = 'delete-room-button';
+            deleteButton.innerHTML = '&times;';
+            deleteButton.title = 'チャットを削除';
+            deleteButton.dataset.roomId = roomId;
+            li.appendChild(deleteButton);
+            roomList.appendChild(li);
+        });
     }
 
-    function scrollToBottom() {
-        chatArea.scrollTop = chatArea.scrollHeight;
-    }
-
+    function setReplyingState(locked) { isReplying = locked; sendButton.disabled = locked; }
+    function scrollToBottom() { chatArea.scrollTop = chatArea.scrollHeight; }
     function createNewRoom() {
         const newRoomId = `room_${Date.now()}`;
         rooms[newRoomId] = { title: '新しいチャット', messages: [] };
         activeRoomId = newRoomId;
         saveAndRenderAll();
     }
-
     function deleteRoom(roomIdToDelete) {
         if (!confirm(`「${rooms[roomIdToDelete].title}」を削除しますか？`)) return;
         delete rooms[roomIdToDelete];
@@ -219,7 +219,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         saveAndRenderAll();
     }
-
+    function saveAndRenderAll() {
+        localStorage.setItem('chatRooms', JSON.stringify(rooms));
+        localStorage.setItem('activeRoomId', activeRoomId);
+        renderRoomList();
+        renderActiveRoom();
+    }
     function loadRooms() {
         try {
             const savedRooms = localStorage.getItem('chatRooms');
@@ -228,18 +233,18 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error("Failed to load chat history.", e);
             rooms = {};
         }
-
         if (Object.keys(rooms).length === 0) {
             createNewRoom();
         }
-
         const savedActiveRoom = localStorage.getItem('activeRoomId');
         activeRoomId = savedActiveRoom && rooms[savedActiveRoom] ? savedActiveRoom : Object.keys(rooms)[0];
     }
-    
+
     newChatButton.addEventListener('click', createNewRoom);
     sendButton.addEventListener('click', handleSend);
-
+    attachButton.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', handleFileSelect);
+    
     roomList.addEventListener('click', (e) => {
         const target = e.target;
         if (target.classList.contains('delete-room-button')) {
@@ -254,7 +259,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
     });
-
+    
     userInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
@@ -264,8 +269,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
     userInput.addEventListener('input', () => {
         userInput.style.height = 'auto';
-        userInput.style.height = `${userInput.scrollHeight}px`;
+        userInput.style.height = userInput.scrollHeight + 'px';
+        scrollToBottom();
     });
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let recognition;
+    if (SpeechRecognition) {
+        recognition = new SpeechRecognition();
+        recognition.lang = 'ja-JP';
+        recognition.onresult = (event) => {
+            userInput.value = event.results[0][0].transcript;
+        };
+        recognition.onend = () => {
+            micButton.classList.remove('recording');
+        };
+        micButton.addEventListener('click', () => {
+            if (micButton.classList.contains('recording')) {
+                recognition.stop();
+            } else {
+                micButton.classList.add('recording');
+                recognition.start();
+            }
+        });
+    } else {
+        micButton.style.display = 'none';
+    }
 
     loadRooms();
     saveAndRenderAll();

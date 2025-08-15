@@ -53,7 +53,7 @@ body, html {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    position: relative; 
+    position: relative;
 }
 
 #room-list li:hover {
@@ -76,18 +76,12 @@ body, html {
     cursor: pointer;
     padding: 5px;
     border-radius: 5px;
-    display: none; 
-}
-
-#room-list .delete-room-button:hover {
-    color: #d9534f;
-    background-color: #f0f2f5;
+    display: none;
 }
 
 #room-list li:hover .delete-room-button {
     display: block;
 }
-
 
 /* --- メインのチャットコンテナ --- */
 #app-container {
@@ -134,11 +128,13 @@ main#chat-area {
 }
 
 .message-bubble {
-    max-width: 65%;
+    max-width: 75%;
     padding: 10px 15px;
     border-radius: 20px;
     line-height: 1.5;
     white-space: pre-wrap;
+    overflow-wrap: break-word;
+    word-break: break-all;
     box-shadow: 0 1px 1px rgba(0,0,0,0.1);
 }
 .message-bubble.bot {
@@ -151,6 +147,11 @@ main#chat-area {
     color: black;
 }
 
+.message-bubble img {
+    max-width: 100%;
+    border-radius: 15px;
+    display: block;
+}
 
 /* --- フッターのスタイル --- */
 footer {
@@ -168,6 +169,7 @@ footer .input-wrapper {
     gap: 8px;
 }
 
+#attach-button,
 #mic-button {
     border: none;
     background-color: transparent;
@@ -178,49 +180,37 @@ footer .input-wrapper {
     color: #555;
     flex-shrink: 0;
     border-radius: 50%;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     transition: background-color .2s;
 }
 
+#attach-button:hover,
 #mic-button:hover {
     background-color: #e0e0e0;
 }
 
 #mic-button.recording {
-    color: #007bff;
-    background-color: #e0e8f5;
-    animation: pulse 1.5s infinite;
-}
-
-@keyframes pulse {
-    0% {
-        transform: scale(1);
-        box-shadow: 0 0 0 0 rgba(0, 123, 255, 0.4);
-    }
-    70% {
-        transform: scale(1);
-        box-shadow: 0 0 0 10px rgba(0, 123, 255, 0);
-    }
-    100% {
-        transform: scale(1);
-        box-shadow: 0 0 0 0 rgba(0, 123, 255, 0);
-    }
+    color: red;
+    background-color: #ffe0e0;
 }
 
 #user-input {
     flex-grow: 1;
     border: 1px solid #ddd;
     border-radius: 20px;
-    padding: 10px 15px;
+    padding: 8px 15px;
     font-size: 1rem;
     background-color: #fff;
     color: black;
     resize: none;
-    line-height: 1.5;
-    max-height: 120px;
-}
-
-#user-input:disabled {
-    background-color: #f9f9f9;
+    box-sizing: border-box;
+    min-height: 42px;
+    overflow-y: auto;
+    align-content: center;
+    max-height: 258px;
 }
 
 #send-button {
@@ -243,24 +233,19 @@ footer .input-wrapper {
     cursor: not-allowed;
 }
 
-/* --- ★ ここから追記 --- */
-
-/* 文字が浮き出るアニメーションの定義 */
+/* --- アニメーションのスタイル --- */
 @keyframes emerge {
-  from {
-    opacity: 0;
-    transform: translateY(10px); /* 少し下から登場 */
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
-/* アニメーションを適用するクラス */
 .message-bubble .emerge-char {
-  display: inline-block; /* アニメーションのために必要 */
-  animation: emerge 1ms ease-out;
+    display: inline-block;
+    animation: emerge 0.6s ease-out;
 }
-
-/* --- ★ ここまで追記 --- */
