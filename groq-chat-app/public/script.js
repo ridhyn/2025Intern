@@ -9,7 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const headerTitle = document.getElementById('header-title');
     const micButton = document.getElementById('mic-button');
 
-    const API_BASE_URL = 'http://localhost:3001';
+    const API_BASE_URL = 'http://localhost:3004';
 
     // ★ 変更点1: タイピング速度を制御するための待機(sleep)関数
     const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -34,48 +34,31 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function streamBotResponse(prompt, botMessageBubble) {
-        const res = await fetch(`${API_BASE_URL}/api/chat`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompt })
-        });
+        try {
+            const res = await fetch(`${API_BASE_URL}/api/chat`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt })
+            });
 
-        if (!res.ok) {
-            botMessageBubble.innerHTML = `エラー: サーバーとの接続に失敗しました (HTTP ${res.status})`;
-            return;
-        }
-        
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            buffer += decoder.decode(value, { stream: true });
-            const parts = buffer.split('\n\n');
-            buffer = parts.pop();
-
-            for (const part of parts) {
-                if (part.startsWith('data: ')) {
-                    const dataString = part.substring(6);
-                    if (dataString === '[DONE]') {
-                        return;
-                    }
-                    try {
-                        const data = JSON.parse(dataString);
-                        if (data.text) {
-                            // ★ 変更点3: すぐに表示せず、typeOutText関数を呼び出す
-                            await typeOutText(data.text, botMessageBubble);
-                        } else if (data.error) {
-                            botMessageBubble.innerHTML = `エラー: ${data.error}`;
-                        }
-                    } catch (e) {
-                        console.error('JSON parse error', e);
-                    }
-                }
+            if (!res.ok) {
+                botMessageBubble.innerHTML = `エラー: サーバーとの接続に失敗しました (HTTP ${res.status})`;
+                return;
             }
+            
+            const data = await res.json();
+            
+            if (data.ok && data.text) {
+                // タイプライター効果で表示
+                await typeOutText(data.text, botMessageBubble);
+            } else if (data.error) {
+                botMessageBubble.innerHTML = `エラー: ${data.error}`;
+            } else {
+                botMessageBubble.innerHTML = 'エラー: 予期しない応答形式です';
+            }
+        } catch (error) {
+            console.error('Fetch error:', error);
+            botMessageBubble.innerHTML = `エラー: 接続に失敗しました`;
         }
     }
 
