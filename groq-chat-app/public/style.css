@@ -53,7 +53,7 @@ body, html {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    position: relative; 
+    position: relative;
 }
 
 #room-list li:hover {
@@ -76,7 +76,7 @@ body, html {
     cursor: pointer;
     padding: 5px;
     border-radius: 5px;
-    display: none; 
+    display: none;
 }
 
 #room-list li:hover .delete-room-button {
@@ -133,8 +133,8 @@ main#chat-area {
     border-radius: 20px;
     line-height: 1.5;
     white-space: pre-wrap;
-    overflow-wrap: break-word; /* word-wrapの新しい名前です */
-    word-break: break-all;     /* ← この行を追加 */
+    overflow-wrap: break-word;
+    word-break: break-all;
     box-shadow: 0 1px 1px rgba(0,0,0,0.1);
 }
 .message-bubble.bot {
@@ -193,8 +193,8 @@ footer .input-wrapper {
 }
 
 #mic-button.recording {
-  color: red;
-  background-color: #ffe0e0;
+    color: red;
+    background-color: #ffe0e0;
 }
 
 #user-input {
@@ -206,13 +206,12 @@ footer .input-wrapper {
     background-color: #fff;
     color: black;
     resize: none;
-    box-sizing: border-box; 
-    min-height: 42px;     /* 1行分の最小の高さ */
-    overflow-y: auto;   /* スクロールバーは常に非表示 */
+    box-sizing: border-box;
+    min-height: 42px;
+    overflow-y: auto;
     align-content: center;
-    max-height: 258px;    /* 約10行分の高さに設定 */
+    max-height: 258px;
 }
-
 
 #send-button {
     background-color: #007bff;
@@ -236,17 +235,17 @@ footer .input-wrapper {
 
 /* --- アニメーションのスタイル --- */
 @keyframes emerge {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 .message-bubble .emerge-char {
-  display: inline-block;
-  animation: emerge 0.6s ease-out;
+    display: inline-block;
+    animation: emerge 0.6s ease-out;
 }

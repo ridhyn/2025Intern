@@ -72,7 +72,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } catch (error) {
             console.error('ストリーミング接続エラー:', error);
-            botMessageBubble.innerText = `エラー: サーバーとの接続に失敗しました。`;
+            botMessageBubble.innerText = 'エラー: サーバーとの接続に失敗しました。';
         }
     }
 
@@ -93,11 +93,9 @@ document.addEventListener('DOMContentLoaded', () => {
         saveMessage(text, 'user');
         addMessageToDOM(text, 'user');
         userInput.value = '';
-        
-        // ★★★ 修正点2：この行で、送信後に高さをリセットします ★★★
-        userInput.style.height = 'auto';
+        userInput.style.height = 'auto'; // 送信後に高さをリセット
 
-        const apiMessages = createApiMessages(); 
+        const apiMessages = createApiMessages();
         const botMessageBubble = addMessageToDOM('', 'bot');
         scrollToBottom();
         streamBotResponse(apiMessages, botMessageBubble)
@@ -144,7 +142,7 @@ document.addEventListener('DOMContentLoaded', () => {
         reader.readAsDataURL(file);
         event.target.value = '';
     }
-    
+
     function addMessageToDOM(text, sender) {
         const messageRow = document.createElement('div');
         messageRow.className = `message-row ${sender}`;
@@ -159,7 +157,7 @@ document.addEventListener('DOMContentLoaded', () => {
         chatArea.appendChild(messageRow);
         return messageBubble;
     }
-    
+
     function saveMessage(text, sender) {
         if (!activeRoomId) return;
         const room = rooms[activeRoomId];
@@ -182,7 +180,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         scrollToBottom();
     }
-    
+
     function renderRoomList() {
         roomList.innerHTML = "";
         Object.keys(rooms).forEach(roomId => {
@@ -238,36 +236,41 @@ document.addEventListener('DOMContentLoaded', () => {
         const savedActiveRoom = localStorage.getItem('activeRoomId');
         activeRoomId = savedActiveRoom && rooms[savedActiveRoom] ? savedActiveRoom : Object.keys(rooms)[0];
     }
-    
+
     newChatButton.addEventListener('click', createNewRoom);
     sendButton.addEventListener('click', handleSend);
     attachButton.addEventListener('click', () => fileInput.click());
     fileInput.addEventListener('change', handleFileSelect);
+    
     roomList.addEventListener('click', (e) => {
         const target = e.target;
         if (target.classList.contains('delete-room-button')) {
-            e.stopPropagation(); const roomId = target.dataset.roomId; if (roomId) deleteRoom(roomId);
+            e.stopPropagation();
+            const roomId = target.dataset.roomId;
+            if (roomId) deleteRoom(roomId);
         } else if (target.tagName === 'LI') {
             const roomId = target.dataset.roomId;
-            if (roomId && roomId !== activeRoomId) { activeRoomId = roomId; saveAndRenderAll(); }
+            if (roomId && roomId !== activeRoomId) {
+                activeRoomId = roomId;
+                saveAndRenderAll();
+            }
         }
     });
-    userInput.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } });
     
+    userInput.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } });
+
     userInput.addEventListener('input', () => {
         userInput.style.height = 'auto';
         userInput.style.height = userInput.scrollHeight + 'px';
-
         scrollToBottom();
     });
-    
+
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     let recognition;
     if (SpeechRecognition) {
         recognition = new SpeechRecognition();
         recognition.lang = 'ja-JP';
         recognition.onresult = (event) => userInput.value = event.results[0][0].transcript;
-        // ★★★ 修正点1：イコール(=)を1つに修正 ★★★
         recognition.onend = () => micButton.classList.remove('recording');
         micButton.addEventListener('click', () => {
             if (micButton.classList.contains('recording')) {
