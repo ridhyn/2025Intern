@@ -2,7 +2,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const fetch = require('node-fetch');
+// Node.js 18+ の組み込みfetchを使用
 
 const app = express();
 app.use(cors());
@@ -22,7 +22,7 @@ app.post('/api/chat', async (req, res) => {
         'Authorization': `Bearer ${GROQ_API_KEY}`
       },
       body: JSON.stringify({
-        model: 'llama2-70b-4096',
+        model: 'llama3-8b-8192',
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.7,
         max_tokens: 2048
