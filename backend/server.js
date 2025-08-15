@@ -49,17 +49,94 @@ async function startServer() {
                 });
 
                 for await (const chunk of stream) {
-                    const content = chunk.choices[0]?.delta?.content || '';
-                    if (content) {
-                        res.write(`data: ${JSON.stringify({ text: content })}\n\n`);
+                    if (chunk.choices[0]?.delta?.content) {
+                        const text = chunk.choices[0].delta.content;
+                        res.write(`data: ${JSON.stringify({ text })}\n\n`);
                     }
                 }
                 res.write(`data: [DONE]\n\n`);
+            } catch (error) {
+                console.error('Chat API error:', error);
+                res.write(`data: ${JSON.stringify({ error: 'Internal server error' })}\n\n`);
+                res.write(`data: [DONE]\n\n`);
+            }
+        });
+
+        // タイトル要約用のAPIエンドポイント
+        app.post('/api/summarize-title', async (req, res) => {
+            try {
+                const { message, maxLength = 25 } = req.body;
+
+                if (!message || typeof message !== 'string') {
+                    return res.status(400).json({ 
+                        ok: false, 
+                        error: 'Message is missing or invalid' 
+                    });
+                }
+
+                const apiKey = process.env.GROQ_API_KEY;
+                if (!apiKey) {
+                    return res.status(500).json({ 
+                        ok: false, 
+                        error: 'Server misconfigured: GROQ_API_KEY is missing.' 
+                    });
+                }
+
+                const groq = new Groq({ apiKey });
+
+                // タイトル要約用のプロンプト
+                const systemPrompt = {
+                    role: 'system',
+                    content: `あなたはチャットのタイトルを生成する専門家です。
+以下のルールに従って、メッセージを簡潔で分かりやすいタイトルに要約してください：
+
+1. 最大${maxLength}文字以内
+2. 挨拶や敬語は除去
+3. 核心的な内容のみを抽出
+4. 自然で読みやすい日本語
+5. 質問の場合は「について」で終わる
+6. 絵文字や特殊文字は除去
+
+例：
+- 「こんにちは、今日の天気について教えてください」→「今日の天気について」
+- 「お疲れ様です。明日の会議の議題について詳しく説明してください」→「明日の会議の議題について」
+- 「すみません、JavaScriptのasync/awaitについて教えてください」→「JavaScriptのasync/awaitについて」
+
+タイトルのみを返答してください。説明や余計な文字は含めないでください。`
+                };
+
+                const userPrompt = {
+                    role: 'user',
+                    content: message
+                };
+
+                const completion = await groq.chat.completions.create({
+                    messages: [systemPrompt, userPrompt],
+                    model: 'llama3-8b-8192',
+                    temperature: 0.3, // 一貫性を保つため低めに設定
+                    max_tokens: 100,
+                });
+
+                const title = completion.choices[0]?.message?.content?.trim();
+                
+                if (!title) {
+                    throw new Error('No title generated');
+                }
+
+                res.json({ 
+                    ok: true, 
+                    title: title,
+                    originalMessage: message,
+                    maxLength: maxLength
+                });
 
             } catch (error) {
-                console.error('Groq API Error:', error);
-                res.write(`data: ${JSON.stringify({ error: 'AIからの応答取得に失敗しました。' })}\n\n`);
-                res.write(`data: [DONE]\n\n`);
+                console.error('Title summarization error:', error);
+                res.status(500).json({ 
+                    ok: false, 
+                    error: 'Failed to generate title',
+                    details: error.message
+                });
             }
         });
 

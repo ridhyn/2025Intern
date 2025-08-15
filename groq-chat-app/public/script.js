@@ -99,16 +99,20 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function handleSend() {
+    async function handleSend() {
         if (isReplying) return;
 
         const text = userInput.value.trim();
         if (!text) return;
 
+        console.log('メッセージ送信:', text);
+        console.log('現在のアクティブルーム:', activeRoomId);
+        console.log('現在のルーム:', rooms[activeRoomId]);
+
         setReplyingState(true);
 
         // ユーザーメッセージを保存・表示
-        saveMessage(text, 'user');
+        await saveMessage(text, 'user');
         addMessageToDOM(text, 'user');
         userInput.value = '';
         userInput.style.height = 'auto';
@@ -142,13 +146,181 @@ document.addEventListener('DOMContentLoaded', () => {
             });
     }
 
-    function saveMessage(text, sender) {
+    async function saveMessage(text, sender) {
         if (!activeRoomId) return;
         const room = rooms[activeRoomId];
         room.messages.push({ text, sender });
-        if (room.messages.length === 1 && sender === 'user') {
-            room.title = text.substring(0, 20);
+        
+        // 最初のユーザーメッセージの場合、タイトルを自動設定
+        // ボットメッセージが1つ、ユーザーメッセージが1つになった時点でタイトルを設定
+        if (room.messages.length === 2 && sender === 'user') {
+            console.log('最初のユーザーメッセージを検出:', text);
+            try {
+                const newTitle = await generateTitleFromMessage(text);
+                console.log('生成されたタイトル:', newTitle);
+                room.title = newTitle;
+                
+                // タイトルが更新されたら、UIも更新
+                if (rooms[activeRoomId] === room) {
+                    console.log('ヘッダータイトルを更新:', newTitle);
+                    headerTitle.textContent = room.title;
+                }
+                // サイドバーのルームリストも更新
+                renderRoomList();
+                console.log('ルームリストを更新完了');
+            } catch (error) {
+                console.error('タイトル生成エラー:', error);
+                // エラーの場合は正規表現ベースの処理を使用
+                const fallbackTitle = generateTitleFromMessageRegex(text);
+                room.title = fallbackTitle;
+                console.log('フォールバックタイトルを使用:', fallbackTitle);
+                
+                // UI更新
+                if (rooms[activeRoomId] === room) {
+                    headerTitle.textContent = room.title;
+                }
+                renderRoomList();
+            }
         }
+    }
+
+    // LLMを使ったタイトル要約
+    async function generateTitleWithLLM(message) {
+        try {
+            console.log('LLM要約を試行中...');
+            
+            const response = await fetch(`${API_BASE_URL}/api/summarize-title`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    message: message,
+                    maxLength: 25 
+                })
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const result = await response.json();
+            console.log('LLM要約成功:', result.title);
+            return result.title;
+            
+        } catch (error) {
+            console.log('LLM要約失敗、フォールバック処理を使用:', error.message);
+            // フォールバック: 正規表現ベースの処理
+            return generateTitleFromMessageRegex(message);
+        }
+    }
+
+    async function generateTitleFromMessage(message) {
+        console.log('generateTitleFromMessage 呼び出し:', message);
+        
+        if (!message || typeof message !== 'string') {
+            console.log('無効なメッセージ、デフォルトタイトルを返す');
+            return '新しいチャット';
+        }
+        
+        // まずLLM要約を試行
+        try {
+            const llmTitle = await generateTitleWithLLM(message);
+            return llmTitle;
+        } catch (error) {
+            console.log('LLM要約でエラー、正規表現ベースの処理を使用');
+            return generateTitleFromMessageRegex(message);
+        }
+    }
+
+    // 正規表現ベースのタイトル生成（フォールバック用）
+    function generateTitleFromMessageRegex(message) {
+        console.log('正規表現ベースのタイトル生成開始');
+        
+        // メッセージをクリーンアップ
+        let cleanMessage = message.trim();
+        console.log('トリム後のメッセージ:', cleanMessage);
+        
+        // 改行や複数のスペースを単一のスペースに置換
+        cleanMessage = cleanMessage.replace(/\s+/g, ' ');
+        console.log('スペース正規化後:', cleanMessage);
+        
+        // 特殊文字や絵文字を除去（必要に応じて）
+        cleanMessage = cleanMessage.replace(/[^\w\s\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\u3400-\u4DBF\u20000-\u2A6DF\u2A700-\u2B73F\u2B740-\u2B81F\u2B820-\u2CEAF\uF900-\uFAFF\u3300-\u33FF\uFE30-\uFE4F\uFF00-\uFFEF\u1F600-\u1F64F\u1F300-\u1F5FF\u1F680-\u1F6FF\u1F1E0-\u1F1FF\u2600-\u26FF\u2700-\u27BF]/g, '');
+        console.log('特殊文字除去後:', cleanMessage);
+        
+        // 挨拶や一般的な表現を除去して、核心部分を抽出
+        let title = cleanMessage;
+        
+        // 一般的な挨拶を除去（より包括的に）
+        const greetings = [
+            /^こんにちは\s*/,
+            /^こんばんは\s*/,
+            /^おはよう\s*/,
+            /^お疲れ様\s*/,
+            /^お疲れ様です\s*/,
+            /^ありがとう\s*/,
+            /^ありがとうございます\s*/,
+            /^すみません\s*/,
+            /^失礼\s*/,
+            /^よろしく\s*/,
+            /^よろしくお願いします\s*/,
+            /^申し訳ございません\s*/,
+            /^申し訳ありません\s*/
+        ];
+        
+        greetings.forEach(greeting => {
+            title = title.replace(greeting, '');
+        });
+        
+        // 文末の敬語や表現を除去
+        title = title.replace(/です\s*$/g, '');
+        title = title.replace(/ます\s*$/g, '');
+        title = title.replace(/ください\s*$/g, '');
+        title = title.replace(/お願いします\s*$/g, '');
+        
+        // 質問の表現を簡潔にする
+        title = title.replace(/について教えてください?/g, 'について');
+        title = title.replace(/について教えて?/g, 'について');
+        title = title.replace(/について説明してください?/g, 'について');
+        title = title.replace(/について説明して?/g, 'について');
+        title = title.replace(/について詳しく教えてください?/g, 'について');
+        title = title.replace(/について詳しく教えて?/g, 'について');
+        title = title.replace(/について知りたいです?/g, 'について');
+        title = title.replace(/について知りたい?/g, 'について');
+        
+        // 長すぎる場合は適切に省略
+        const maxLength = 25;
+        if (title.length > maxLength) {
+            console.log('メッセージが長すぎる、省略処理を実行');
+            // 文の区切りで切る（句読点、疑問符、感嘆符など）
+            const sentenceEnd = title.search(/[。！？\?!]/);
+            if (sentenceEnd > 0 && sentenceEnd <= maxLength) {
+                title = title.substring(0, sentenceEnd + 1);
+                console.log('文の区切りで省略:', title);
+            } else {
+                // 単語の区切りで切る
+                const words = title.split(' ');
+                let truncated = '';
+                for (const word of words) {
+                    if ((truncated + word).length <= maxLength) {
+                        truncated += (truncated ? ' ' : '') + word;
+                    } else {
+                        break;
+                    }
+                }
+                title = truncated || title.substring(0, maxLength);
+                console.log('単語の区切りで省略:', title);
+            }
+        }
+        
+        // 空文字列の場合はフォールバック
+        if (!title.trim()) {
+            console.log('空文字列、デフォルトタイトルを返す');
+            return '新しいチャット';
+        }
+        
+        const finalTitle = title.trim();
+        console.log('最終タイトル:', finalTitle);
+        return finalTitle;
     }
 
     function addMessageToDOM(text, sender) {
@@ -203,6 +375,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function createNewRoom() {
+        console.log('新しいチャットルームを作成');
         const newRoomId = `room_${Date.now()}`;
         rooms[newRoomId] = { 
             title: '新しいチャット', 
@@ -214,7 +387,13 @@ document.addEventListener('DOMContentLoaded', () => {
             ] 
         };
         activeRoomId = newRoomId;
+        console.log('作成されたルーム:', newRoomId, rooms[newRoomId]);
         saveAndRenderAll();
+        
+        // 新しいチャットの作成後、入力フィールドにフォーカス
+        setTimeout(() => {
+            userInput.focus();
+        }, 100);
     }
 
     function deleteRoom(roomIdToDelete) {
