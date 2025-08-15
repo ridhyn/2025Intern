@@ -132,8 +132,9 @@ main#chat-area {
     padding: 10px 15px;
     border-radius: 20px;
     line-height: 1.5;
-    white-space: pre-wrap; /* 改行を反映させる */
-    word-wrap: break-word; /* 長い単語を折り返す */
+    white-space: pre-wrap;
+    overflow-wrap: break-word; /* word-wrapの新しい名前です */
+    word-break: break-all;     /* ← この行を追加 */
     box-shadow: 0 1px 1px rgba(0,0,0,0.1);
 }
 .message-bubble.bot {
@@ -144,6 +145,12 @@ main#chat-area {
 .message-bubble.user {
     background-color: #8de041;
     color: black;
+}
+
+.message-bubble img {
+    max-width: 100%;
+    border-radius: 15px;
+    display: block;
 }
 
 /* --- フッターのスタイル --- */
@@ -162,6 +169,7 @@ footer .input-wrapper {
     gap: 8px;
 }
 
+#attach-button,
 #mic-button {
     border: none;
     background-color: transparent;
@@ -172,22 +180,39 @@ footer .input-wrapper {
     color: #555;
     flex-shrink: 0;
     border-radius: 50%;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     transition: background-color .2s;
+}
+
+#attach-button:hover,
+#mic-button:hover {
+    background-color: #e0e0e0;
+}
+
+#mic-button.recording {
+  color: red;
+  background-color: #ffe0e0;
 }
 
 #user-input {
     flex-grow: 1;
     border: 1px solid #ddd;
     border-radius: 20px;
-    padding: 10px 15px;
+    padding: 8px 15px;
     font-size: 1rem;
     background-color: #fff;
     color: black;
     resize: none;
-    line-height: 1.5;
-    max-height: 120px;
-    overflow-y: auto;
+    box-sizing: border-box; 
+    min-height: 42px;     /* 1行分の最小の高さ */
+    overflow-y: auto;   /* スクロールバーは常に非表示 */
+    align-content: center;
+    max-height: 258px;    /* 約10行分の高さに設定 */
 }
+
 
 #send-button {
     background-color: #007bff;
@@ -207,4 +232,21 @@ footer .input-wrapper {
 #send-button:disabled {
     background-color: #b0c4de;
     cursor: not-allowed;
+}
+
+/* --- アニメーションのスタイル --- */
+@keyframes emerge {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.message-bubble .emerge-char {
+  display: inline-block;
+  animation: emerge 0.6s ease-out;
 }
