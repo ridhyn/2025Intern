@@ -4,7 +4,7 @@ const cors = require('cors');
 const Groq = require('groq-sdk');
 
 const app = express();
-
+//くそ
 async function startServer() {
     try {
         app.use(cors());
