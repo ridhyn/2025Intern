@@ -207,10 +207,10 @@ footer .input-wrapper {
     color: black;
     resize: none;
     box-sizing: border-box;
-    min-height: 42px;
+    min-height: 20px;
     overflow-y: auto;
     align-content: center;
-    max-height: 258px;
+    max-height: 172px;
 }
 
 #send-button {
@@ -234,18 +234,10 @@ footer .input-wrapper {
 }
 
 /* --- アニメーションのスタイル --- */
-@keyframes emerge {
-    from {
-        opacity: 0;
-        transform: translateY(10px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
 .message-bubble .emerge-char {
     display: inline-block;
-    animation: emerge 0.6s ease-out;
+    /* アニメーションを削除して即座にはっきり表示 */
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }

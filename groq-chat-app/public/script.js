@@ -32,80 +32,71 @@ document.addEventListener('DOMContentLoaded', () => {
                 bubble.innerHTML += `<span class="emerge-char">${char}</span>`;
             }
             scrollToBottom();
-            await sleep(50);
+            await sleep(20);
         }
     }
 
-    async function streamBotResponse(messages, botMessageBubble) {
+    async function streamBotResponse(prompt, botMessageBubble, isFirstMessage = false) {
         try {
             const res = await fetch(`${API_BASE_URL}/api/chat`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ messages })
+                body: JSON.stringify({ prompt, isFirstMessage })
             });
             if (!res.ok) throw new Error(`サーバーエラー: ${res.status}`);
-            const reader = res.body.getReader();
-            const decoder = new TextDecoder();
-            let buffer = '';
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                buffer += decoder.decode(value, { stream: true });
-                const parts = buffer.split('\n\n');
-                buffer = parts.pop();
-                for (const part of parts) {
-                    if (part.startsWith('data: ')) {
-                        const dataString = part.substring(6);
-                        if (dataString === '[DONE]') return;
-                        try {
-                            const data = JSON.parse(dataString);
-                            if (data.text) {
-                                await typeOutText(data.text, botMessageBubble);
-                            } else if (data.error) {
-                                botMessageBubble.innerText = `エラー: ${data.error}`;
-                            }
-                        } catch (e) {
-                            console.error('JSON解析エラー', e, dataString);
-                        }
-                    }
-                }
+            const data = await res.json();
+            
+            if (data.ok && data.text) {
+                await typeOutText(data.text, botMessageBubble);
+                return data.title; // タイトルがあれば返す
+            } else {
+                botMessageBubble.innerText = `エラー: ${data.error || 'Unknown error'}`;
+                return null;
             }
         } catch (error) {
-            console.error('ストリーミング接続エラー:', error);
+            console.error('API接続エラー:', error);
             botMessageBubble.innerText = 'エラー: サーバーとの接続に失敗しました。';
+            return null;
         }
     }
 
-    function createApiMessages() {
-        if (!activeRoomId || !rooms[activeRoomId]) return [];
-        const textPromptForImage = '（画像が送信されました。画像について言及し、簡単な応答をしてください。）';
-        return rooms[activeRoomId].messages.map(msg => ({
-            role: msg.sender === 'bot' ? 'assistant' : 'user',
-            content: msg.text.startsWith('data:image') ? textPromptForImage : msg.text
-        }));
-    }
 
     function handleSend() {
         if (isReplying) return;
         const text = userInput.value.trim();
         if (!text) return;
         setReplyingState(true);
+        
+        const currentRoom = rooms[activeRoomId];
+        // 初期メッセージ（こんにちは...）を除いてユーザーメッセージが最初かどうかを判定
+        const userMessages = currentRoom ? currentRoom.messages.filter(msg => msg.sender === 'user') : [];
+        const isFirstMessage = userMessages.length === 0;
+        
         saveMessage(text, 'user');
         addMessageToDOM(text, 'user');
         userInput.value = '';
         userInput.style.height = 'auto'; // 送信後に高さをリセット
 
-        const apiMessages = createApiMessages();
         const botMessageBubble = addMessageToDOM('', 'bot');
         scrollToBottom();
-        streamBotResponse(apiMessages, botMessageBubble)
-            .then(() => {
+        streamBotResponse(text, botMessageBubble, isFirstMessage)
+            .then((generatedTitle) => {
                 const finalBotText = botMessageBubble.innerText;
                 saveMessage(finalBotText, 'bot');
+                
+                // 最初のメッセージでタイトルが生成された場合、更新
+                if (isFirstMessage && generatedTitle) {
+                    console.log('タイトル生成2:', generatedTitle);
+                    generatedTitle = generatedTitle.replace(/^(要約：|タイトル：|概要：|まとめ：|題名：)/g, '').trim();
+                    rooms[activeRoomId].title = generatedTitle;
+                } else {
+                    console.log('タイトル生成スキップ:', { isFirstMessage, generatedTitle });
+                }
+                
                 saveAndRenderAll();
             })
             .catch((err) => {
-                console.error("Streaming failed", err);
+                console.error("API call failed", err);
                 botMessageBubble.innerText = "エラーが発生しました。";
                 saveMessage("エラーが発生しました。", 'bot');
             })
@@ -121,19 +112,38 @@ document.addEventListener('DOMContentLoaded', () => {
         reader.onload = (e) => {
             const imageDataUrl = e.target.result;
             setReplyingState(true);
+            
+            const currentRoom = rooms[activeRoomId];
+            // 初期メッセージ（こんにちは...）を除いてユーザーメッセージが最初かどうかを判定
+            const userMessages = currentRoom ? currentRoom.messages.filter(msg => msg.sender === 'user') : [];
+            const isFirstMessage = userMessages.length === 0;
+            
             saveMessage(imageDataUrl, 'user');
             addMessageToDOM(imageDataUrl, 'user');
             scrollToBottom();
-            const apiMessages = createApiMessages();
+            
             const botMessageBubble = addMessageToDOM('', 'bot');
             scrollToBottom();
-            streamBotResponse(apiMessages, botMessageBubble)
-                .then(() => {
+            
+            // 画像の場合の固定プロンプト
+            const imagePrompt = '画像が送信されました。画像について簡単に応答してください。';
+            
+            streamBotResponse(imagePrompt, botMessageBubble, isFirstMessage)
+                .then((generatedTitle) => {
                     const finalBotText = botMessageBubble.innerText;
                     saveMessage(finalBotText, 'bot');
+                    
+                    if (isFirstMessage && generatedTitle) {
+                        console.log('画像チャットのタイトル生成:', generatedTitle);
+                        rooms[activeRoomId].title = generatedTitle;
+                    } else {
+                        console.log('画像チャットのタイトル生成スキップ:', { isFirstMessage, generatedTitle });
+                    }
+                    
+                    saveAndRenderAll();
                 })
                 .catch((err) => {
-                    console.error("Streaming failed", err);
+                    console.error("API call failed", err);
                 })
                 .finally(() => {
                     setReplyingState(false);
@@ -202,7 +212,13 @@ document.addEventListener('DOMContentLoaded', () => {
     function scrollToBottom() { chatArea.scrollTop = chatArea.scrollHeight; }
     function createNewRoom() {
         const newRoomId = `room_${Date.now()}`;
-        rooms[newRoomId] = { title: '新しいチャット', messages: [] };
+        rooms[newRoomId] = { 
+            title: '新しいチャット', 
+            messages: [{
+                text: 'こんにちは、お手伝いできることはありますか？',
+                sender: 'bot'
+            }]
+        };
         activeRoomId = newRoomId;
         saveAndRenderAll();
     }
