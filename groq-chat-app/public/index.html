@@ -11,7 +11,7 @@
         <aside id="sidebar">
             <button id="new-chat-button">+ 新しいチャット</button>
             <ul id="room-list">
-                </ul>
+            </ul>
         </aside>
 
         <div id="app-container">
@@ -19,17 +19,18 @@
                 <h1 id="header-title"></h1>
             </header>
             <main id="chat-area">
-                </main>
+            </main>
             <footer>
                 <div class="input-wrapper">
+                    <button id="attach-button" title="ファイルを添付">📎</button>
+                    <input type="file" id="file-input" accept="image/*" style="display: none;">
                     <button id="mic-button" title="音声入力">🎤</button>
-                    <textarea id="user-input" placeholder="メッセージを入力..." rows="1"></textarea>
+                    <textarea id="user-input" placeholder="メッセージを入力..."></textarea>
                     <button id="send-button" title="送信">➤</button>
                 </div>
             </footer>
         </div>
     </div>
-    <script src="config.js"></script>
     <script src="script.js"></script>
 </body>
 </html>
